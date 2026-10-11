@@ -1,28 +1,26 @@
 import { getNotes, createNote, deleteNote } from "./api.js";
 
 const form = document.querySelector("#note-form");
-const titleInput = document.querySelector("#note-title");
-const contentInput = document.querySelector("#note-content");
-const tagsInput = document.querySelector("#note-tags");
-const createButton = document.querySelector("#create-button");
-const refreshButton = document.querySelector("#refresh-button");
+const titleInput = document.querySelector("#title-input");
+const bodyInput = document.querySelector("#body-input");
+const submitButton = document.querySelector("#submit-btn");
+const loadButton = document.querySelector("#load-btn");
 const statusElement = document.querySelector("#status");
 const notesList = document.querySelector("#notes-list");
+
+let notes = [];
 
 function setStatus(message) {
   statusElement.textContent = message;
 }
 
-function renderNotes(notes) {
+function renderNotes() {
   notesList.replaceChildren();
 
-  if (!Array.isArray(notes)) {
-    setStatus("The API did not return a valid notes list.");
-    return;
-  }
-
   if (notes.length === 0) {
-    setStatus("No notes found. Create your first note.");
+    const emptyItem = document.createElement("li");
+    emptyItem.textContent = "No notes to display. Create a note or load notes.";
+    notesList.append(emptyItem);
     return;
   }
 
@@ -31,20 +29,16 @@ function renderNotes(notes) {
     item.className = "note";
 
     const title = document.createElement("h3");
-    title.textContent = note.title ?? "Untitled note";
+    title.textContent = note.title || "Untitled note";
 
-    const content = document.createElement("p");
-    content.textContent = note.content ?? "";
+    const body = document.createElement("p");
+    body.textContent = note.body || "No content provided.";
 
-    const tags = document.createElement("p");
-    tags.className = "note-tags";
+    const user = document.createElement("p");
+    user.className = "note-tags";
+    user.textContent = `User ID: ${note.userId ?? "Unknown"} | Note ID: ${note.id}`;
 
-    const tagNames = Array.isArray(note.tags) ? note.tags : [];
-    tags.textContent = tagNames.length
-      ? `Tags: ${tagNames.join(", ")}`
-      : "No tags";
-
-    item.append(title, content, tags);
+    item.append(title, body, user);
 
     if (note.id !== undefined && note.id !== null) {
       const deleteButton = document.createElement("button");
@@ -53,15 +47,23 @@ function renderNotes(notes) {
       deleteButton.textContent = "Delete";
 
       deleteButton.addEventListener("click", async () => {
-        if (!window.confirm("Delete this note?")) return;
+        if (!window.confirm("Delete this note from the displayed list?")) {
+          return;
+        }
 
         deleteButton.disabled = true;
-        setStatus("Deleting note...");
+        setStatus(`Deleting note ${note.id}...`);
 
         try {
-          await deleteNote(note.id);
-          await loadNotes();
-          setStatus("Note deleted successfully.");
+          const result = await deleteNote(note.id);
+
+          // JSONPlaceholder simulates deletion; update our local list too.
+          notes = notes.filter((item) => item.id !== note.id);
+          renderNotes();
+
+          setStatus(
+            `Note ${note.id} removed from the displayed list. HTTP ${result.status}.`
+          );
         } catch (error) {
           setStatus(error.message);
           deleteButton.disabled = false;
@@ -73,24 +75,26 @@ function renderNotes(notes) {
 
     notesList.append(item);
   }
-
-  setStatus(`${notes.length} note(s) loaded.`);
 }
 
 async function loadNotes() {
-  refreshButton.disabled = true;
-  setStatus("Loading notes...");
+  loadButton.disabled = true;
+  setStatus("Loading notes from JSONPlaceholder...");
 
   try {
     const result = await getNotes();
-    const notes = Array.isArray(result) ? result : result.notes;
-    renderNotes(notes);
+
+    if (!Array.isArray(result.data)) {
+      throw new Error("The API did not return a valid list of notes.");
+    }
+
+    notes = result.data;
+    renderNotes();
+    setStatus(`Loaded ${notes.length} notes. HTTP ${result.status}.`);
   } catch (error) {
-    setStatus(
-      `${error.message}. Check that your backend is running at the URL in api.js.`
-    );
+    setStatus(`Could not load notes: ${error.message}`);
   } finally {
-    refreshButton.disabled = false;
+    loadButton.disabled = false;
   }
 }
 
@@ -98,34 +102,41 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const title = titleInput.value.trim();
-  const content = contentInput.value.trim();
-  const tags = tagsInput.value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+  const body = bodyInput.value.trim();
 
-  if (!title || !content) {
-    setStatus("Please enter both a title and note content.");
+  if (!title) {
+    setStatus("Please enter a title. The content is optional.");
+    titleInput.focus();
     return;
   }
 
-  createButton.disabled = true;
-  setStatus("Creating note...");
+  submitButton.disabled = true;
+  setStatus("Sending your note to JSONPlaceholder...");
 
   try {
-    await createNote({ title, content, tags });
+    const result = await createNote({ title, body });
+    const newNote = result.data;
+
+    if (!newNote || newNote.id === undefined) {
+      throw new Error("The API response did not contain a new note ID.");
+    }
+
+    // JSONPlaceholder does not permanently save posts.
+    // Add the returned post locally so it appears immediately.
+    notes = [newNote, ...notes];
+    renderNotes();
     form.reset();
-    await loadNotes();
-    setStatus("Note created successfully.");
-  } catch (error) {
+
     setStatus(
-      `${error.message}. Check that your backend is running at the URL in api.js.`
+      `Note created successfully. HTTP ${result.status}. New note ID: ${newNote.id}.`
     );
+  } catch (error) {
+    setStatus(`Could not create note: ${error.message}`);
   } finally {
-    createButton.disabled = false;
+    submitButton.disabled = false;
   }
 });
 
-refreshButton.addEventListener("click", loadNotes);
+loadButton.addEventListener("click", loadNotes);
 
 loadNotes();

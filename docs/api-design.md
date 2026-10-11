@@ -2,68 +2,135 @@
 
 ## Purpose
 
-The API allows authenticated users to manage their own notes and organise
-them with tags.
+This project demonstrates frontend communication with the public
+JSONPlaceholder mock API. It uses HTTP requests to retrieve, create, and
+delete posts without requiring a custom backend.
 
 ## Base URL
 
-`http://localhost:3000/api`
+`https://jsonplaceholder.typicode.com/posts`
 
-A production service should use HTTPS.
+## Endpoints used by the frontend
 
-## Endpoints
-
-| Method | Endpoint | Purpose | Success status |
+| Method | Endpoint | Purpose | Expected success status |
 |---|---|---|---|
-| POST | `/auth/login` | Authenticate a user | 200 |
-| GET | `/notes` | List the current user's notes | 200 |
-| POST | `/notes` | Create a note | 201 |
-| GET | `/notes/{id}` | Retrieve one note | 200 |
-| PATCH | `/notes/{id}` | Update a note | 200 |
-| DELETE | `/notes/{id}` | Delete a note | 204 |
-| GET | `/tags` | List tags | 200 |
+| GET | `/posts?_limit=10` | Load up to ten sample posts | 200 OK |
+| POST | `/posts` | Submit a new post | 201 Created |
+| DELETE | `/posts/{id}` | Request deletion of a post | 200 OK |
 
-## Create a note
+The browser sends requests directly to the public service. The frontend
+displays errors when a request fails.
 
-Request: `POST /api/notes`
+## Listing notes
+
+Request:
+
+`GET https://jsonplaceholder.typicode.com/posts?_limit=10`
+
+Expected status: `200 OK`
+
+Example response:
+
+```json
+[
+  {
+    "userId": 1,
+    "id": 1,
+    "title": "sample note title",
+    "body": "sample note body"
+  },
+  {
+    "userId": 1,
+    "id": 2,
+    "title": "another note title",
+    "body": "another note body"
+  }
+]
+```
+
+## Creating a note
+
+Request:
+
+`POST https://jsonplaceholder.typicode.com/posts`
+
+The title is required by the frontend. The body is optional and is sent
+as an empty string when omitted. The frontend supplies `userId: 1`.
+
+Example request:
 
 ```json
 {
   "title": "Study HTML",
-  "content": "Practise semantic HTML.",
-  "tags": ["study", "web-foundations"]
+  "body": "",
+  "userId": 1
 }
 ```
 
-Expected response: `201 Created`
+Expected status: `201 Created`
+
+Example response:
 
 ```json
 {
-  "id": "note-101",
   "title": "Study HTML",
-  "content": "Practise semantic HTML.",
-  "tags": ["study", "web-foundations"]
+  "body": "",
+  "userId": 1,
+  "id": 101
 }
 ```
 
-## Error status codes
+The returned ID is an illustrative example. The actual response supplies
+the ID displayed by the application.
 
-- 400 Bad Request: invalid input.
-- 401 Unauthorized: missing or invalid authentication.
-- 403 Forbidden: insufficient permissions.
-- 404 Not Found: requested resource does not exist.
-- 500 Internal Server Error: unexpected server failure.
+After a successful response, the frontend inserts the returned post into
+its displayed list and reports the HTTP status and new ID.
+
+## Deleting a note
+
+Request:
+
+`DELETE https://jsonplaceholder.typicode.com/posts/1`
+
+Expected status: `200 OK`
+
+The frontend removes the selected note from its local displayed list
+after a successful response.
+
+## Example error payload
+
+A service may return an error response such as:
+
+```json
+{
+  "message": "The requested resource was not found."
+}
+```
+
+This is an illustrative error payload, not a guarantee that
+JSONPlaceholder returns this exact body for every error. The client also
+reports the HTTP status code and status text where available.
+
+Common HTTP statuses include:
+
+- `200 OK`: the request succeeded.
+- `201 Created`: a resource was created by the request.
+- `400 Bad Request`: the request contains invalid input.
+- `404 Not Found`: the requested resource was not found.
+- `500 Internal Server Error`: an unexpected server error occurred.
+
+## Mock API limitation
+
+JSONPlaceholder simulates writes. A successful POST returns a response
+with an ID, but the new post is not permanently stored on the service.
+A DELETE response likewise does not permanently change the remote data.
+The frontend updates its local display after successful requests.
 
 ## Validation and security
 
-- Require a title and validate its length.
-- Validate note content and tag values on the server.
-- Authenticate protected requests.
-- Check that users can only access notes they own.
-- Return consistent error responses.
-- Never expose private API secrets in frontend code.
-
-## Implementation note
-
-This document specifies the expected API contract. The frontend client
-requires a compatible backend; the backend is not included here.
+- Require a non-empty title in the frontend.
+- Permit an empty body.
+- Use `textContent` to display API-provided text safely.
+- Check response status codes and handle network failures.
+- A production application would require server-side authentication,
+  authorization, persistent storage, and validation.

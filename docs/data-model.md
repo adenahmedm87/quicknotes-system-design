@@ -2,80 +2,123 @@
 
 ## Overview
 
-A relational database is suitable for users, notes, and tags because the
-entities have clear relationships and need data-integrity constraints.
+A relational database is suitable for users, notes, and tags because these
+entities have clear relationships and require data-integrity constraints.
 
-## Users table
+The SQL below uses PostgreSQL syntax. It documents the proposed production
+data model; the frontend currently uses JSONPlaceholder rather than this
+database.
 
-| Field | Type | Rules |
-|---|---|---|
-| id | INTEGER | Primary key |
-| name | VARCHAR(100) | Required |
-| email | VARCHAR(255) | Required, unique |
-| password_hash | VARCHAR(255) | Required |
-| created_at | TIMESTAMP | Creation time |
+## Executable table definitions
 
-## Notes table
+Create the parent tables before the tables that reference them.
 
-| Field | Type | Rules |
-|---|---|---|
-| id | INTEGER | Primary key |
-| user_id | INTEGER | Foreign key to users |
-| title | VARCHAR(100) | Required |
-| content | TEXT | Note body |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last update time |
+### 1. Users
 
-## Tags table
+```sql
+CREATE TABLE users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-| Field | Type | Rules |
-|---|---|---|
-| id | INTEGER | Primary key |
-| name | VARCHAR(50) | Required, unique |
+### 2. Notes
 
-## Note_tags table
+The body is optional, so `content` may be NULL.
 
-| Field | Type | Rules |
-|---|---|---|
-| note_id | INTEGER | Foreign key to notes |
-| tag_id | INTEGER | Foreign key to tags |
+```sql
+CREATE TABLE notes (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(100) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-The pair `(note_id, tag_id)` is the composite primary key.
+### 3. Tags
+
+```sql
+CREATE TABLE tags (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);
+```
+
+### 4. Note_tags
+
+This join table implements the many-to-many relationship between notes
+and tags.
+
+```sql
+CREATE TABLE note_tags (
+    note_id BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    tag_id BIGINT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
+);
+```
 
 ## Relationships
 
 - One user can own many notes.
 - Each note belongs to one user.
 - A note can have many tags.
-- A tag can be associated with many notes.
-- `note_tags` implements the many-to-many relationship.
+- A tag can belong to many notes.
+- `note_tags` connects notes and tags.
+- Foreign keys preserve relationships; primary and unique keys prevent
+  duplicate identifiers.
 
-## Example SQL
+## Example queries
+
+### Query 1: List a user's notes
 
 ```sql
-SELECT id, title, content
+SELECT id, title, content, created_at, updated_at
 FROM notes
 WHERE user_id = 7
 ORDER BY updated_at DESC;
 ```
 
-This query retrieves the notes belonging to a specific user.
+This returns notes belonging to user 7, newest updates first.
+
+### Query 2: List notes and their tags
 
 ```sql
-SELECT notes.title, tags.name
+SELECT notes.title, tags.name AS tag_name
 FROM notes
 JOIN note_tags ON notes.id = note_tags.note_id
-JOIN tags ON tags.id = note_tags.tag_id;
+JOIN tags ON tags.id = note_tags.tag_id
+ORDER BY notes.title;
 ```
 
-This query retrieves note titles and their associated tag names.
+This returns each note title with its associated tag.
+
+### Query 3: Count notes per user
+
+```sql
+SELECT users.id, users.name, COUNT(notes.id) AS note_count
+FROM users
+LEFT JOIN notes ON notes.user_id = users.id
+GROUP BY users.id, users.name
+ORDER BY note_count DESC;
+```
+
+This counts each user's notes, including users who have no notes.
 
 ## Indexing
 
-An index on `(user_id, updated_at)` can improve queries that retrieve
-a user's notes ordered by update time.
+```sql
+CREATE INDEX idx_notes_user_updated
+ON notes (user_id, updated_at DESC);
+```
+
+This index helps retrieve one user's notes in update order.
 
 ## Data protection
 
-Use parameterized SQL queries, validate inputs, enforce ownership checks,
-and store password hashes rather than plain-text passwords.
+Use parameterized SQL, validate inputs, enforce ownership checks, and store
+password hashes rather than plain-text passwords.
