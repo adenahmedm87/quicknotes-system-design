@@ -6,6 +6,9 @@ A relational database is suitable for users, notes, and tags because these
 entities have clear relationships and require data-integrity constraints.
 
 The SQL below uses PostgreSQL syntax. It documents the proposed production
+
+The API uses the field name `body` for note text, while this database model
+stores the same information in the `content` column of the `notes` table.
 data model; the frontend currently uses JSONPlaceholder rather than this
 database.
 
